@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automata Visualizations</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #tabs {
+            margin: 20px;
+        }
+        .tab {
+            display: none;
+        }
+        .tab-content {
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-top: -1px;
+            display: flex;
+        }
+        .tab-button {
+            cursor: pointer;
+            padding: 10px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f5f5f5;
+            display: inline-block;
+        }
+        .tab-button.active {
+            background-color: #e0e0e0;
+            font-weight: bold;
+        }
+        .tab-content {
+            display: none;
+        }
+        .active-tab {
+            display: flex;
+        }
+        svg {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+        .arrow {
+            fill: none;
+            stroke: black;
+            stroke-width: 2px;
+        }
+        .arrowhead {
+            fill: black;
+        }
+        .state {
+            fill: #87CEFA;
+            stroke: black;
+            stroke-width: 2px;
+        }
+        .accept-state {
+            fill: none;
+            stroke: green;
+            stroke-width: 3px;
+        }
+        .accept-state-inner {
+            fill: #87CEFA;
+            stroke: black;
+            stroke-width: 2px;
+        }
+        .start-state {
+            stroke: blue;
+            stroke-width: 3px;
+        }
+        .label {
+            font-size: 16px;
+            fill: black;
+            text-anchor: middle;
+        }
+        .transition-label {
+            font-size: 14px;
+            fill: black;
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+        form {
+            margin-bottom: 20px;
+            width: 300px;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input, textarea {
+            width: calc(100% - 22px);
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #step-by-step {
+            margin-left: 20px;
+            width: 300px;
+        }
+        #step-by-step ul {
+            padding-left: 20px;
+        }
+        .highlight {
+            stroke: red;
+            stroke-width: 3px;
+        }
+        #visualization {
+            margin-left: 20px;
+            width: 800px;
+        }
+        #visualization svg {
+            width: 100%;
+            height: 600px;
+        }
+    </style>
+</head>
+<body>
+    <div id="tabs">
+        <div>
+            <span class="tab-button" onclick="showTab('dfa')">DFA Visualization</span>
+            <span class="tab-button" onclick="showTab('tm')">Turing Machine Visualization</span>
+        </div>
+        <div id="dfa" class="tab tab-content">
+            <div>
+                <form id="dfa-form">
+                    <div class="form-group">
+                        <label for="states">States (comma-separated):</label>
+                        <input type="text" id="states" value="q0, q1, q2, q3" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="start-state">Start State:</label>
+                        <input type="text" id="start-state" value="q0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="accept-states">Accept States (comma-separated):</label>
+                        <input type="text" id="accept-states" value="q3">
+                    </div>
+                    <div class="form-group">
+                        <label for="transitions">Transitions (format: from,to,label; separated by semicolons):</label>
+                        <textarea id="transitions" rows="4" required>
+q0,q1,a; q1,q2,b; q2,q3,c; q3,q1,b
+                        </textarea>
+                    </div>
+                    <button type="submit">Update DFA Visualization</button>
+                </form>
+                <div id="visualization">
+                    <svg></svg>
+                </div>
+            </div>
+            <div id="step-by-step">
+                <h2>Visualization</h2>
+                <ul id="steps-list">
+                    <!-- Steps will be added here -->
+                </ul>
+                <button id="next-step">Next Step</button>
+            </div>
+        </div>
+        <div id="tm" class="tab tab-content">
+            <h2>Turing Machine Visualization</h2>
+            <div id="tm"></div>
+        </div>
+    </div>
+
+    <!-- DFA Visualization Script -->
+    <script>
+        let currentStep = 0;
+
+        function createDfaVisualization() {
+            const svg = d3.select('#visualization svg');
+            svg.selectAll('*').remove();  // Clear previous visualization
+
+            // Define marker for arrows
+            svg.append('defs').append('marker')
+                .attr('id', 'arrowhead')
+                .attr('viewBox', '0 0 10 10')
+                .attr('refX', 9)
+                .attr('refY', 5)
+                .attr('markerWidth', 10)
+                .attr('markerHeight', 10)
+                .attr('orient', 'auto')
+                .append('path')
+                .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+                .attr('class', 'arrowhead');
+
+            // Handle form submission
+            document.getElementById('dfa-form').addEventListener('submit', function(event) {
+                event.preventDefault();
+
+                // Get user input
+                const statesInput = document.getElementById('states').value.split(',').map(s => s.trim());
+                const startState = document.getElementById('start-state').value.trim();
+                const acceptStatesInput = document.getElementById('accept-states').value.split(',').map(s => s.trim());
+                const transitionsInput = document.getElementById('transitions').value.split(';').map(t => {
+                    const [from, to, label] = t.split(',').map(s => s.trim());
+                    return { from, to, label };
+                });
+
+                // Prepare data
+                const states = statesInput.map(id => ({
+                    id,
+                    x: Math.random() * 600 + 100,  // Random position within the canvas
+                    y: Math.random() * 400 + 100,
+                    start: id === startState,
+                    accept: acceptStatesInput.includes(id)
+                }));
+
+                // Draw DFA
+                svg.selectAll('*').remove();  // Clear previous visualization
+
+                // Draw transitions
+                svg.selectAll('.transition')
+                    .data(transitionsInput)
+                    .enter()
+                    .append('line')
+                    .attr('class', 'arrow')
+                    .attr('x1', d => states.find(s => s.id === d.from).x)
+                    .attr('y1', d => states.find(s => s.id === d.from).y)
+                    .attr('x2', d => states.find(s => s.id === d.to).x)
+                    .attr('y2', d => states.find(s => s.id === d.to).y)
+                    .attr('marker-end', 'url(#arrowhead)');
+
+                // Draw transition labels
+                svg.selectAll('.transition-label')
+                    .data(transitionsInput)
+                    .enter()
+                    .append('text')
+                    .attr('class', 'transition-label')
+                    .attr('x', d => (states.find(s => s.id === d.from).x + states.find(s => s.id === d.to).x) / 2)
+                    .attr('y', d => (states.find(s => s.id === d.from).y + states.find(s => s.id === d.to).y) / 2)
+                    .text(d => d.label);
+
+                // Draw states
+                svg.selectAll('.state')
+                    .data(states)
+                    .enter()
+                    .append('circle')
+                    .attr('class', d => {
+                        let classes = 'state';
+                        if (d.start) classes += ' start-state';
+                        if (d.accept) classes += ' accept-state';
+                        return classes;
+                    })
+                    .attr('cx', d => d.x)
+                    .attr('cy', d => d.y)
+                    .attr('r', 40); // Increased radius for states
+
+                // Draw accepting state with inner and outer circles
+                svg.selectAll('.accept-state-inner')
+                    .data(states.filter(d => d.accept))
+                    .enter()
+                    .append('circle')
+                    .attr('class', 'accept-state-inner')
+                    .attr('cx', d => d.x)
+                    .attr('cy', d => d.y)
+                    .attr('r', 30); // Inner circle radius
+
+                // Add labels to states
+                svg.selectAll('.state-label')
+                    .data(states)
+                    .enter()
+                    .append('text')
+                    .attr('class', 'label')
+                    .attr('x', d => d.x)
+                    .attr('y', d => d.y)
+                    .text(d => d.id);
+
+                // Initialize step-by-step list
+                updateStepByStep(transitionsInput, states);
+
+                // Initialize step-by-step transitions
+                document.getElementById('next-step').addEventListener('click', function() {
+                    if (currentStep < transitionsInput.length) {
+                        highlightStep(transitionsInput[currentStep], states);
+                        currentStep++;
+                    }
+                });
+            });
+        }
+
+        function highlightStep(transition, states) {
+            const svg = d3.select('#visualization svg');
+            svg.selectAll('.highlight').remove(); // Remove previous highlights
+
+            const fromState = states.find(s => s.id === transition.from);
+            const toState = states.find(s => s.id === transition.to);
+
+            // Highlight transition
+            svg.selectAll('.arrow')
+                .filter(d => d === transition)
+                .classed('highlight', true);
+
+            // Highlight states
+            svg.selectAll('.state')
+                .filter(d => d === fromState || d === toState)
+                .classed('highlight', true);
+        }
+
+        function updateStepByStep(transitions, states) {
+            const stepsList = document.getElementById('steps-list');
+            stepsList.innerHTML = ''; // Clear previous steps
+
+            transitions.forEach((transition, index) => {
+                const fromState = states.find(s => s.id === transition.from);
+                const toState = states.find(s => s.id === transition.to);
+
+                const listItem = document.createElement('li');
+                listItem.textContent = `Step ${index + 1}: From ${fromState.id} to ${toState.id} with label '${transition.label}'`;
+                stepsList.appendChild(listItem);
+            });
+        }
+
+        // Show tab function
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active-tab');
+            });
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.getElementById(tabId).classList.add('active-tab');
+            document.querySelector(`.tab-button[onclick="showTab('${tabId}')"]`).classList.add('active');
+        }
+
+        // Initialize the DFA visualization on page load
+        document.addEventListener('DOMContentLoaded', createDfaVisualization);
+    </script>
+</body>
+</html>
